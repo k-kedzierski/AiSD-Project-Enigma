@@ -11,6 +11,9 @@
 #include <inttypes.h>
 #include <stdbool.h>
 
+#define INVALID_NUMBER false
+#define SUCCESS true
+
 // Debug stream
 #ifdef _DEBUG
   #define _DEBUG_PRINTF(...) fprintf(stderr, __VA_ARGS__ );
@@ -57,10 +60,13 @@ int_fast32_t* permutation_scan( int_fast32_t size ) {
 int_fast32_t* permutation_revert( int_fast32_t alphabet_size, int_fast32_t permutation[] ) {
     int_fast32_t* permutation_reverted = (int_fast32_t*)malloc( alphabet_size * sizeof(int_fast32_t) );
     
-    int_fast32_t current_index = alphabet_size - 1;
-    for( int_fast32_t i = 0; i < alphabet_size; i++ ) permutation_reverted[i] = permutation[current_index--];
+    for( int_fast32_t i = 0; i < alphabet_size; i++ ) permutation_reverted[permutation[i]-1] = i+1;
 
     return permutation_reverted;
+}
+
+void permutation_apply( int_fast32_t* permutation, int_fast32_t* number ) {
+    *number = permutation[*number - 1];
 }
 
 rotor_t* rotor_scan( int_fast32_t size ) {
@@ -91,6 +97,24 @@ reflector_t* reflector_scan( int_fast32_t size ) {
     return return_reflector;
 }
 
+bool encrypt( encryptor_t* enigma, int_fast32_t number ) {
+    if( number == 0 ) return INVALID_NUMBER;
+    
+    // Implement moving rotors
+    
+    // Forward movement
+    for( int_fast32_t i = 0; i < enigma->rotors_count; i++ ) permutation_apply(enigma->rotors[i]->permutation, &number);
+    
+    permutation_apply(enigma->reflector->permutation, &number);
+    
+    // Backward movement
+    for( int_fast32_t i = 0; i < enigma->rotors_count; i++ ) permutation_apply(enigma->rotors[i]->permutation_reverse, &number);
+    
+    printf("%" SCNdFAST32 " ", number);
+    
+    return SUCCESS;
+}
+
 void encryptor_free( encryptor_t* encryptor ) {
     free(encryptor->rotors);
     free(encryptor->rotors_positions);
@@ -113,6 +137,7 @@ int main() {
     int_fast32_t rotor_index;
     int_fast32_t rotor_position;
     int_fast32_t reflector_index;
+    int_fast32_t number;
     
     scanf("%" SCNdFAST32, &alphabet_size);
     
@@ -152,6 +177,12 @@ int main() {
         // Scan encryptor reflector
         scanf("%" SCNdFAST32, &reflector_index);
         enigma->reflector = reflectors[reflector_index];
+        
+        do {
+            scanf("%" SCNdFAST32, &number);
+        } while( encrypt(enigma,number) );
+        
+        printf("\n");
         
         // Free encryptor
         encryptor_free(enigma);
