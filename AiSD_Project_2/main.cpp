@@ -35,13 +35,19 @@ typedef struct {
     int_fast32_t* permutation;
 } reflector_t;
 
+typedef struct {
+    int_fast32_t rotors_count;
+    rotor_t** rotors;
+    int_fast32_t* rotors_positions;
+    reflector_t* reflector;
+} encryptor_t;
+
 
 //  ===
 //  Functions
 //  ===
 
 int_fast32_t* permutation_scan( int_fast32_t size ) {
-    // To avoid code duplication
     int_fast32_t* return_permutation = (int_fast32_t*)malloc( size * sizeof(int_fast32_t));
     
     for( int_fast32_t i = 0; i < size; i++ ) scanf(" %" SCNdFAST32, &return_permutation[i]);
@@ -85,6 +91,13 @@ reflector_t* reflector_scan( int_fast32_t size ) {
     return return_reflector;
 }
 
+void encryptor_free( encryptor_t* encryptor ) {
+    free(encryptor->rotors);
+    free(encryptor->rotors_positions);
+    
+    free(encryptor);
+}
+
 //  ===
 //  Main
 //  ===
@@ -96,6 +109,10 @@ int main() {
     int_fast32_t alphabet_size;
     int_fast32_t rotors_count;
     int_fast32_t reflectors_count;
+    int_fast32_t tasks_count;
+    int_fast32_t rotor_index;
+    int_fast32_t rotor_position;
+    int_fast32_t reflector_index;
     
     scanf("%" SCNdFAST32, &alphabet_size);
     
@@ -113,6 +130,33 @@ int main() {
         reflectors[i] = reflector_scan(alphabet_size);
     }
     
+    scanf("%" SCNdFAST32, &tasks_count);
+    for( int_fast32_t i = 0; i < tasks_count; i++ ) {
+        
+        // Initialize encryptor
+        encryptor_t* enigma = (encryptor_t*)malloc(sizeof(encryptor_t));
+        
+        scanf("%" SCNdFAST32, &enigma->rotors_count);
+        enigma->rotors = (rotor_t**)malloc( enigma->rotors_count * sizeof(rotor_t) );
+        enigma->rotors_positions = (int_fast32_t*)malloc( enigma->rotors_count * sizeof(int_fast32_t) );
+        
+        // Scan encryptor rotors
+        for( int_fast32_t j = 0; j < enigma->rotors_count; j++ ) {
+            scanf("%" SCNdFAST32, &rotor_index);
+            scanf("%" SCNdFAST32, &rotor_position);
+            
+            enigma->rotors[j] = rotors[rotor_index];
+            enigma->rotors_positions[j] = --rotor_position;
+        }
+        
+        // Scan encryptor reflector
+        scanf("%" SCNdFAST32, &reflector_index);
+        enigma->reflector = reflectors[reflector_index];
+        
+        // Free encryptor
+        encryptor_free(enigma);
+        
+    }
     
     return 0;
     
