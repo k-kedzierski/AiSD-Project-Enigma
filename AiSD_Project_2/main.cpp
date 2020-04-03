@@ -39,10 +39,12 @@ typedef struct {
 } reflector_t;
 
 typedef struct {
+    int_fast32_t alphabet_size;
     int_fast32_t rotors_count;
     rotor_t** rotors;
     int_fast32_t* rotors_positions;
     reflector_t* reflector;
+    bool STOS_Flags[3]; // STOS Flags: check for first and second rotor turnover
 } encryptor_t;
 
 
@@ -82,7 +84,9 @@ rotor_t* rotor_scan( int_fast32_t size ) {
     
     for( int_fast32_t i = 0; i < return_rotor->notches_count; i++ ) {
         scanf(" %" SCNdFAST32, &return_rotor->notches[i]);
-        return_rotor->notches[i]--;
+        // Substract 2 - instead of 1. STOS Workaround
+        return_rotor->notches[i] -= 2;
+        return_rotor->notches[i] = (return_rotor->notches[i] + size) % size;
     }
     
     // Revert permutation for backward movement
@@ -97,20 +101,81 @@ reflector_t* reflector_scan( int_fast32_t size ) {
     return return_reflector;
 }
 
+bool rotor_check_notches( rotor_t* rotor, int_fast32_t position ) {
+    
+    for( int_fast32_t i = 0; i < rotor->notches_count; i++ ) {
+        if( rotor->notches[i] == position ) return true;
+    }
+    return false;
+}
+
+void advance_rotors( encryptor_t* enigma ) {
+    
+    int_fast32_t moveable_rotors = enigma->rotors_count >= 3 ? 3 : enigma->rotors_count;
+    
+    switch(moveable_rotors) {
+        case 3:
+            if(enigma->STOS_Flags[1] == true && rotor_check_notches(enigma->rotors[1], enigma->rotors_positions[1])) {
+                _DEBUG_PRINTF("Rotor 2 at notch position; advance rotor 3\n");
+                enigma->rotors_positions[2] += 1;
+                enigma->rotors_positions[2] %= enigma->alphabet_size;
+                enigma->STOS_Flags[2] = true; // double-stepping
+            }
+            // 'break' excluded; double-stepping
+        case 2:
+            if((enigma->STOS_Flags[0] == true && rotor_check_notches(enigma->rotors[0], enigma->rotors_positions[0])) || enigma->STOS_Flags[2] == true ) {
+                _DEBUG_PRINTF("Rotor 1 at notch position; advance rotor 2\n");
+                enigma->rotors_positions[1] += 1;
+                enigma->rotors_positions[1] %= enigma->alphabet_size;
+                enigma->STOS_Flags[1] = true; // Brute force rotor 2 flag update
+                enigma->STOS_Flags[2] = false; // Brute force rotor 3 flag update
+            }
+            break;
+    }
+    
+    // Rotor 1 is advanced every encryption
+    enigma->rotors_positions[0] += 1;
+    enigma->rotors_positions[0] %= enigma->alphabet_size;
+    enigma->STOS_Flags[0] = true; // Brute force rotor 1 flag update
+}
+
 bool encrypt( encryptor_t* enigma, int_fast32_t number ) {
     if( number == 0 ) return INVALID_NUMBER;
     
-    // Implement moving rotors
+    // Advance(move) rotors
+    advance_rotors(enigma);
     
     // Forward movement
-    for( int_fast32_t i = 0; i < enigma->rotors_count; i++ ) permutation_apply(enigma->rotors[i]->permutation, &number);
-    
+    for( int_fast32_t i = 0; i < enigma->rotors_count; i++ ) {
+        number -= 1;
+        number = (number + enigma->rotors_positions[i]) % enigma->alphabet_size;
+        number += 1;
+        _DEBUG_PRINTF("Encrypting: rotor[%d]; passing number %d; position %d, FORWARD\n",i, number, enigma->rotors_positions[i]);
+        permutation_apply(enigma->rotors[i]->permutation, &number);
+        _DEBUG_PRINTF("Applied permutation; number %d\n",number);
+        number -= 1;
+        number = ((number - enigma->rotors_positions[i]) + enigma->alphabet_size) % enigma->alphabet_size;
+        number += 1;
+    }
+    _DEBUG_PRINTF("Encrypting: reflector; passing number %d\n", number);
     permutation_apply(enigma->reflector->permutation, &number);
+    _DEBUG_PRINTF("Applied permutation; number %d\n",number);
     
     // Backward movement
-    for( int_fast32_t i = 0; i < enigma->rotors_count; i++ ) permutation_apply(enigma->rotors[i]->permutation_reverse, &number);
+    for( int_fast32_t i = enigma->rotors_count - 1; i >= 0; i-- ) {
+        number -= 1;
+        number = (number + enigma->rotors_positions[i]) % enigma->alphabet_size;
+        number += 1;
+        _DEBUG_PRINTF("Encrypting: rotor[%d]; passing number %d; position %d, BACKWARD\n",i, number, enigma->rotors_positions[i]);
+        permutation_apply(enigma->rotors[i]->permutation_reverse, &number);
+        _DEBUG_PRINTF("Applied permutation; number %d\n",number);
+        number -= 1;
+        number = ((number - enigma->rotors_positions[i]) + enigma->alphabet_size) % enigma->alphabet_size;
+        number += 1;
+    }
     
     printf("%" SCNdFAST32 " ", number);
+    _DEBUG_PRINTF("\n");
     
     return SUCCESS;
 }
@@ -121,6 +186,25 @@ void encryptor_free( encryptor_t* encryptor ) {
     
     free(encryptor);
 }
+
+void free_rotors( rotor_t** rotors, int_fast32_t rotors_count ) {
+    for( int_fast32_t i = 0; i < rotors_count; i++ ) {
+        if( rotors[i]->notches_count > 0 ) free(rotors[i]->notches);
+        free(rotors[i]->permutation);
+        free(rotors[i]->permutation_reverse);
+        free(rotors[i]);
+    }
+    free(rotors);
+}
+
+void free_reflectors( reflector_t** reflectors, int_fast32_t reflector_count ) {
+    for( int_fast32_t i = 0; i < reflector_count; i++ ) {
+        free(reflectors[i]->permutation);
+        free(reflectors[i]);
+    }
+    free(reflectors);
+}
+
 
 //  ===
 //  Main
@@ -161,9 +245,16 @@ int main() {
         // Initialize encryptor
         encryptor_t* enigma = (encryptor_t*)malloc(sizeof(encryptor_t));
         
+        enigma->alphabet_size = alphabet_size;
+        
         scanf("%" SCNdFAST32, &enigma->rotors_count);
         enigma->rotors = (rotor_t**)malloc( enigma->rotors_count * sizeof(rotor_t) );
         enigma->rotors_positions = (int_fast32_t*)malloc( enigma->rotors_count * sizeof(int_fast32_t) );
+        
+        // Fix flags for STOS
+        enigma->STOS_Flags[0] = false;
+        enigma->STOS_Flags[1] = false;
+        enigma->STOS_Flags[2] = false;
         
         // Scan encryptor rotors
         for( int_fast32_t j = 0; j < enigma->rotors_count; j++ ) {
@@ -188,6 +279,10 @@ int main() {
         encryptor_free(enigma);
         
     }
+    
+    // Free dynamically allocated data
+    free_rotors(rotors, rotors_count);
+    free_reflectors(reflectors, reflectors_count);
     
     return 0;
     
